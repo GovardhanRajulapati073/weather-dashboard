@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Weather Dashboard</title>
+  <script src="https://kit.fontawesome.com/a2c5f1a7d0.js" crossorigin="anonymous"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
+    body {
+      background: linear-gradient(to top right, #1e3c72, #2a5298);
+      color: #fff; padding: 40px;
+      transition: background 0.4s ease;
+    }
+    .dashboard {
+      max-width: 1300px; margin: auto;
+      display: grid; grid-template-columns: 2fr 1fr; gap: 30px;
+      background: rgba(0, 0, 0, 0.2); border-radius: 20px; padding: 30px;
+    }
+    .left, .right { display: flex; flex-direction: column; gap: 20px; }
+    .search { display: flex; gap: 10px; }
+    .search input {
+      flex: 1; padding: 10px; border-radius: 8px; border: none; font-size: 16px;
+    }
+    .search button {
+      padding: 10px 20px; border: none; border-radius: 8px; background: #ffd700;
+      font-weight: bold; cursor: pointer;
+    }
+    .toggle-btn {
+      background: #000; color: #ffd700;
+      padding: 8px 14px; border-radius: 8px;
+      border: 1px solid #ffd700; cursor: pointer;
+      float: right;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 20px; border-radius: 15px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    }
+    .location { font-size: 22px; font-weight: 600; }
+    .temp { font-size: 64px; font-weight: bold; }
+    .desc { text-transform: capitalize; font-size: 18px; margin-top: -10px; }
+    .details-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+    }
+    .details-grid .card { text-align: center; }
+    .label { font-size: 14px; color: #ccc; }
+    #tempChart, #extraChart { width: 100%; max-height: 250px; }
+    .forecast-box, .hourly-box {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 15px; padding: 20px;
+    }
+    .forecast, .hourly {
+      display: flex; justify-content: space-between;
+      gap: 10px; flex-wrap: wrap;
+    }
+    .forecast .card, .hourly .card {
+      text-align: center; padding: 10px; flex: 1 0 90px;
+    }
+    .map-box { height: 300px; width: 100%; border-radius: 15px; overflow: hidden; }
+    iframe { width: 100%; height: 100%; border: none; border-radius: 15px; }
+    .weather-image-box {
+      height: 560px; background: rgba(255,255,255,0.05);
+      border-radius: 15px; text-align: center; padding: 10px;
+    }
+    .weather-image-box img {
+      height: 100%; width: 100%; border-radius: 15px; object-fit: cover;
+    }
+    .abc { font-size: 40px; text-align: center; margin-bottom: 10px; }
+    .history { margin-top: 15px; }
+    .history button {
+      background: rgba(255,255,255,0.15);
+      border: none; color: #fff; padding: 6px 12px;
+      border-radius: 6px; margin: 4px; cursor: pointer;
+      transition: 0.3s;
+    }
+    .history button:hover { background: rgba(255,255,255,0.3); }
+  </style>
+</head>
+<body>
+  <div class="abc"><b>Live Weather Dashboard</b>
+    <button class="toggle-btn" id="themeToggle">🌙 Dark Mode</button>
+  </div>
+
+  <div class="dashboard">
+    <div class="left">
+      <div class="search">
+        <input type="text" id="searchInput" placeholder="Search city...">
+        <button onclick="searchWeather()">Search</button>
+      </div>
+
+      <div class="card history">
+        <h4>Recent Searches:</h4>
+        <div id="searchHistory"></div>
+      </div>
+
+      <div class="card">
+        <div id="location" class="location">Fetching...</div>
+        <div id="temperature" class="temp">--°C</div>
+        <div id="description" class="desc">--</div>
+        <div id="lastUpdated" class="label">Last Updated: --</div>
+      </div>
+
+      <div class="card">
+        <canvas id="tempChart"></canvas>
+      </div>
+
+      <div class="card">
+        <h3>Humidity & Pressure Trends</h3>
+        <canvas id="extraChart"></canvas>
+      </div>
+
+      <div class="forecast-box">
+        <h3>7-Day Forecast</h3>
+        <div class="forecast" id="forecast"></div>
+      </div>
+
+      <div class="hourly-box">
+        <h3>Hourly Forecast</h3>
+        <div class="hourly" id="hourly"></div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="details-grid">
+        <div class="card"><div class="label">Humidity</div><div id="humidity">--%</div></div>
+        <div class="card"><div class="label">Feels Like</div><div id="feelsLike">--°C</div></div>
+        <div class="card"><div class="label">Visibility</div><div id="visibility">-- km</div></div>
+        <div class="card"><div class="label">Wind Speed</div><div id="wind">-- km/h</div></div>
+        <div class="card"><div class="label">Sunrise</div><div id="sunrise">--</div></div>
+        <div class="card"><div class="label">Sunset</div><div id="sunset">--</div></div>
+      </div>
+
+      <div class="map-box card">
+        <iframe id="map" src="" allowfullscreen></iframe>
+      </div>
+
+      <div class="weather-image-box">
+        <img src="https://res.cloudinary.com/di9hkkbfb/image/upload/v1751993607/pexels-photo-3052361_sylov9.jpg" alt="Weather Visual" />
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let tempChartInstance = null;
+    let extraChartInstance = null;
+
+    window.onload = () => getLocation();
+
+    function getLocation() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+          fetch(`/api/weather?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`)
+            .then(res => res.json())
+            .then(updateUI);
+        });
+      }
+    }
+
+    function searchWeather() {
+      const city = document.getElementById("searchInput").value.trim();
+      if (!city) return;
+      fetch(`/api/weather?city=${city}`)
+        .then(res => res.json())
+        .then(updateUI);
+      saveSearchHistory(city);
+    }
+
+    function updateUI(data) {
+      const current = data.current;
+      const forecast = data.forecast;
+
+      document.getElementById("location").innerText = `${current.name}, ${current.sys.country}`;
+      document.getElementById("temperature").innerText = `${Math.round(current.main.temp)}°C`;
+      document.getElementById("description").innerText = current.weather[0].description;
+      document.getElementById("humidity").innerText = `${current.main.humidity}%`;
+      document.getElementById("feelsLike").innerText = `${Math.round(current.main.feels_like)}°C`;
+      document.getElementById("visibility").innerText = `${(current.visibility / 1000).toFixed(1)} km`;
+      document.getElementById("wind").innerText = `${current.wind.speed} km/h`;
+      document.getElementById("sunrise").innerText = new Date(current.sys.sunrise * 1000).toLocaleTimeString();
+      document.getElementById("sunset").innerText = new Date(current.sys.sunset * 1000).toLocaleTimeString();
+      document.getElementById("lastUpdated").innerText = "Last Updated: " + new Date().toLocaleTimeString();
+
+      drawChart(current.main.temp);
+      updateExtraChart(forecast);
+      updateForecast(forecast);
+      updateHourly(forecast);
+      updateMap(current.coord.lat, current.coord.lon);
+    }
+
+    function updateForecast(forecast) {
+      const daily = {};
+      forecast.list.forEach(item => {
+        const date = item.dt_txt.split(" ")[0];
+        if (!daily[date]) daily[date] = item;
+      });
+      const forecastEl = document.getElementById("forecast");
+      forecastEl.innerHTML = Object.values(daily).slice(0, 7).map(item => `
+        <div class="card">
+          <div>${new Date(item.dt_txt).toLocaleDateString("en-US", { weekday: "short" })}</div>
+          <img src="https://openweathermap.org/img/wn/${item.weather[0].icon}.png" alt="icon">
+          <div>${Math.round(item.main.temp)}°C</div>
+        </div>`).join('');
+    }
+
+    function updateHourly(forecast) {
+      const hourlyEl = document.getElementById("hourly");
+      hourlyEl.innerHTML = forecast.list.slice(0, 8).map(item => `
+        <div class="card">
+          <div>${new Date(item.dt_txt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+          <img src="https://openweathermap.org/img/wn/${item.weather[0].icon}.png" alt="icon">
+          <div>${Math.round(item.main.temp)}°C</div>
+        </div>`).join('');
+    }
+
+    function drawChart(temp) {
+      const ctx = document.getElementById("tempChart").getContext("2d");
+      if (tempChartInstance) tempChartInstance.destroy();
+      tempChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: ['Morning', 'Afternoon', 'Evening', 'Night'],
+          datasets: [{
+            label: 'Temp (°C)',
+            data: [temp - 2, temp, temp - 1, temp - 3],
+            borderColor: '#ffd700',
+            backgroundColor: 'rgba(255,215,0,0.2)',
+            tension: 0.4
+          }]
+        },
+        options: { plugins: { legend: { display: false } } }
+      });
+    }
+
+    function updateExtraChart(forecast) {
+      const nextHours = forecast.list.slice(0, 8);
+      const labels = nextHours.map(e => new Date(e.dt * 1000).getHours() + ':00');
+      const humidity = nextHours.map(e => e.main.humidity);
+      const pressure = nextHours.map(e => e.main.pressure);
+      const ctx = document.getElementById('extraChart').getContext('2d');
+
+      if (extraChartInstance) extraChartInstance.destroy();
+      extraChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Humidity (%)', data: humidity, borderColor: 'rgba(75,192,192,1)', tension: 0.4 },
+            { label: 'Pressure (hPa)', data: pressure, borderColor: 'rgba(255,99,132,1)', tension: 0.4 }
+          ]
+        },
+        options: { responsive: true, plugins: { legend: { display: true } } }
+      });
+    }
+
+    function updateMap(lat, lon) {
+      const mapFrame = document.getElementById("map");
+      mapFrame.src = `https://maps.google.com/maps?q=${lat},${lon}&z=13&output=embed&t=k&refresh=${Date.now()}`;
+    }
+
+    // ====== SEARCH HISTORY ======
+    function saveSearchHistory(city) {
+      let history = JSON.parse(localStorage.getItem('searchHistory')) || [];
+      if (!history.includes(city)) {
+        history.unshift(city);
+        if (history.length > 5) history.pop();
+        localStorage.setItem('searchHistory', JSON.stringify(history));
+      }
+      renderSearchHistory();
+    }
+
+    function renderSearchHistory() {
+      const history = JSON.parse(localStorage.getItem('searchHistory')) || [];
+      const container = document.getElementById('searchHistory');
+      container.innerHTML = history.map(c => `<button onclick="fetch('/api/weather?city=${c}').then(r=>r.json()).then(updateUI)">${c}</button>`).join('');
+    }
+    renderSearchHistory();
+
+    // ====== THEME TOGGLE ======
+    const themeToggle = document.getElementById('themeToggle');
+    let dark = true;
+    themeToggle.onclick = () => {
+      dark = !dark;
+      document.body.style.background = dark
+        ? 'linear-gradient(to top right, #1e3c72, #2a5298)'
+        : 'linear-gradient(to bottom right, #e3f2fd, #90caf9)';
+      themeToggle.textContent = dark ? '🌙 Dark Mode' : '☀️ Light Mode';
+    };
+  </script>
+</body>
+</html>
