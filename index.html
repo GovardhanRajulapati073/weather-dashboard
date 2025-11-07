@@ -7,6 +7,7 @@
   <script src="https://kit.fontawesome.com/a2c5f1a7d0.js" crossorigin="anonymous"></script>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
     body {
@@ -91,6 +92,7 @@
         <button onclick="searchWeather()">Search</button>
       </div>
 
+      <!-- Search History -->
       <div class="card history">
         <h4>Recent Searches:</h4>
         <div id="searchHistory"></div>
@@ -144,81 +146,91 @@
   </div>
 
   <script>
-    let tempChartInstance = null;
-    let extraChartInstance = null;
+    const API_KEY = "764deb87fa9b1517db738d2c15b3dd47";
 
-    window.onload = () => getLocation();
+    window.onload = () => fetchWeather();
 
-    function getLocation() {
-      if (navigator.geolocation) {
+    function fetchWeather(city = "") {
+      if (city) {
+        getWeather(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=metric`);
+        getForecast(`https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${API_KEY}&units=metric`);
+        saveSearchHistory(city);
+      } else {
         navigator.geolocation.getCurrentPosition(pos => {
-          fetch(`/api/weather?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`)
-            .then(res => res.json())
-            .then(updateUI);
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          getWeather(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`);
+          getForecast(`https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`);
+          updateMap(lat, lon);
         });
       }
     }
 
-    function searchWeather() {
-      const city = document.getElementById("searchInput").value.trim();
-      if (!city) return;
-      fetch(`/api/weather?city=${city}`)
+    function updateMap(lat, lon) {
+      document.getElementById("map").src = `https://maps.google.com/maps?q=${lat},${lon}&z=13&output=embed`;
+    }
+
+    function getWeather(url) {
+      fetch(url)
         .then(res => res.json())
-        .then(updateUI);
-      saveSearchHistory(city);
+        .then(data => {
+          document.getElementById("location").innerText = `${data.name}, ${data.sys.country}`;
+          document.getElementById("temperature").innerText = `${Math.round(data.main.temp)}°C`;
+          document.getElementById("description").innerText = data.weather[0].description;
+          document.getElementById("humidity").innerText = `${data.main.humidity}%`;
+          document.getElementById("feelsLike").innerText = `${Math.round(data.main.feels_like)}°C`;
+          document.getElementById("visibility").innerText = `${(data.visibility / 1000).toFixed(1)} km`;
+          document.getElementById("wind").innerText = `${data.wind.speed} km/h`;
+          document.getElementById("sunrise").innerText = new Date(data.sys.sunrise * 1000).toLocaleTimeString();
+          document.getElementById("sunset").innerText = new Date(data.sys.sunset * 1000).toLocaleTimeString();
+          document.getElementById("lastUpdated").innerText = "Last Updated: " + new Date().toLocaleTimeString();
+          drawChart(data.main.temp);
+          updateMap(data.coord.lat, data.coord.lon);
+        });
     }
 
-    function updateUI(data) {
-      const current = data.current;
-      const forecast = data.forecast;
+    function getForecast(url) {
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          const forecastEl = document.getElementById("forecast");
+          const hourlyEl = document.getElementById("hourly");
+          forecastEl.innerHTML = "";
+          hourlyEl.innerHTML = "";
 
-      document.getElementById("location").innerText = `${current.name}, ${current.sys.country}`;
-      document.getElementById("temperature").innerText = `${Math.round(current.main.temp)}°C`;
-      document.getElementById("description").innerText = current.weather[0].description;
-      document.getElementById("humidity").innerText = `${current.main.humidity}%`;
-      document.getElementById("feelsLike").innerText = `${Math.round(current.main.feels_like)}°C`;
-      document.getElementById("visibility").innerText = `${(current.visibility / 1000).toFixed(1)} km`;
-      document.getElementById("wind").innerText = `${current.wind.speed} km/h`;
-      document.getElementById("sunrise").innerText = new Date(current.sys.sunrise * 1000).toLocaleTimeString();
-      document.getElementById("sunset").innerText = new Date(current.sys.sunset * 1000).toLocaleTimeString();
-      document.getElementById("lastUpdated").innerText = "Last Updated: " + new Date().toLocaleTimeString();
+          const daily = {};
+          data.list.forEach(item => {
+            const date = item.dt_txt.split(" ")[0];
+            if (!daily[date]) daily[date] = item;
+          });
 
-      drawChart(current.main.temp);
-      updateExtraChart(forecast);
-      updateForecast(forecast);
-      updateHourly(forecast);
-      updateMap(current.coord.lat, current.coord.lon);
-    }
+          Object.values(daily).slice(0, 7).forEach(item => {
+            const day = new Date(item.dt_txt).toLocaleDateString("en-US", { weekday: "short" });
+            forecastEl.innerHTML += `
+              <div class="card">
+                <div>${day}</div>
+                <img src="https://openweathermap.org/img/wn/${item.weather[0].icon}.png" alt="icon">
+                <div>${Math.round(item.main.temp)}°C</div>
+              </div>`;
+          });
 
-    function updateForecast(forecast) {
-      const daily = {};
-      forecast.list.forEach(item => {
-        const date = item.dt_txt.split(" ")[0];
-        if (!daily[date]) daily[date] = item;
-      });
-      const forecastEl = document.getElementById("forecast");
-      forecastEl.innerHTML = Object.values(daily).slice(0, 7).map(item => `
-        <div class="card">
-          <div>${new Date(item.dt_txt).toLocaleDateString("en-US", { weekday: "short" })}</div>
-          <img src="https://openweathermap.org/img/wn/${item.weather[0].icon}.png" alt="icon">
-          <div>${Math.round(item.main.temp)}°C</div>
-        </div>`).join('');
-    }
+          data.list.slice(0, 8).forEach(item => {
+            const time = new Date(item.dt_txt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            hourlyEl.innerHTML += `
+              <div class="card">
+                <div>${time}</div>
+                <img src="https://openweathermap.org/img/wn/${item.weather[0].icon}.png" alt="icon">
+                <div>${Math.round(item.main.temp)}°C</div>
+              </div>`;
+          });
 
-    function updateHourly(forecast) {
-      const hourlyEl = document.getElementById("hourly");
-      hourlyEl.innerHTML = forecast.list.slice(0, 8).map(item => `
-        <div class="card">
-          <div>${new Date(item.dt_txt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-          <img src="https://openweathermap.org/img/wn/${item.weather[0].icon}.png" alt="icon">
-          <div>${Math.round(item.main.temp)}°C</div>
-        </div>`).join('');
+          updateExtraChart(data);
+        });
     }
 
     function drawChart(temp) {
       const ctx = document.getElementById("tempChart").getContext("2d");
-      if (tempChartInstance) tempChartInstance.destroy();
-      tempChartInstance = new Chart(ctx, {
+      new Chart(ctx, {
         type: 'line',
         data: {
           labels: ['Morning', 'Afternoon', 'Evening', 'Night'],
@@ -234,15 +246,14 @@
       });
     }
 
-    function updateExtraChart(forecast) {
-      const nextHours = forecast.list.slice(0, 8);
-      const labels = nextHours.map(e => new Date(e.dt * 1000).getHours() + ':00');
-      const humidity = nextHours.map(e => e.main.humidity);
-      const pressure = nextHours.map(e => e.main.pressure);
-      const ctx = document.getElementById('extraChart').getContext('2d');
+    function updateExtraChart(forecastData) {
+      const nextHours = forecastData.list.slice(0, 8);
+      const labels = nextHours.map(entry => new Date(entry.dt * 1000).getHours() + ':00');
+      const humidity = nextHours.map(entry => entry.main.humidity);
+      const pressure = nextHours.map(entry => entry.main.pressure);
 
-      if (extraChartInstance) extraChartInstance.destroy();
-      extraChartInstance = new Chart(ctx, {
+      const ctx = document.getElementById('extraChart').getContext('2d');
+      new Chart(ctx, {
         type: 'line',
         data: {
           labels,
@@ -255,9 +266,9 @@
       });
     }
 
-    function updateMap(lat, lon) {
-      const mapFrame = document.getElementById("map");
-      mapFrame.src = `https://maps.google.com/maps?q=${lat},${lon}&z=13&output=embed&t=k&refresh=${Date.now()}`;
+    function searchWeather() {
+      const city = document.getElementById("searchInput").value;
+      if (city) fetchWeather(city);
     }
 
     // ====== SEARCH HISTORY ======
@@ -274,8 +285,9 @@
     function renderSearchHistory() {
       const history = JSON.parse(localStorage.getItem('searchHistory')) || [];
       const container = document.getElementById('searchHistory');
-      container.innerHTML = history.map(c => `<button onclick="fetch('/api/weather?city=${c}').then(r=>r.json()).then(updateUI)">${c}</button>`).join('');
+      container.innerHTML = history.map(c => `<button onclick="fetchWeather('${c}')">${c}</button>`).join('');
     }
+
     renderSearchHistory();
 
     // ====== THEME TOGGLE ======
@@ -283,10 +295,13 @@
     let dark = true;
     themeToggle.onclick = () => {
       dark = !dark;
-      document.body.style.background = dark
-        ? 'linear-gradient(to top right, #1e3c72, #2a5298)'
-        : 'linear-gradient(to bottom right, #e3f2fd, #90caf9)';
-      themeToggle.textContent = dark ? '🌙 Dark Mode' : '☀️ Light Mode';
+      if (dark) {
+        document.body.style.background = 'linear-gradient(to top right, #1e3c72, #2a5298)';
+        themeToggle.textContent = '🌙 Dark Mode';
+      } else {
+        document.body.style.background = 'linear-gradient(to bottom right, #e3f2fd, #90caf9)';
+        themeToggle.textContent = '☀️ Light Mode';
+      }
     };
   </script>
 </body>
